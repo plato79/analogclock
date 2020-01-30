@@ -231,61 +231,83 @@ function myclock1(id) {
 }
 
 /*var schedule = {
+    name,
+    location,
     start,
     end,
-    free,
-    subject
+    free
 }*/
+
+function today(hours, minutes) {
+    var date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+}
 
 function myclock2(id,schedule, opts) {
     
-    var ns = []; // schedule with free times
-    var s = schedule[0];
-    startHr = s.start.substring(0,2);
-    startMn = s.start.substring(3,5);
-    if ((startHr > 7 ) ||
-        ((startHr = 7 ) && (startMn > 0 ))) {
-        ns.push({start:"07:00",end:s.start,free:true});
-    }
-    var prevEndHr, prevEndMn;
-    schedule.forEach(s => {
-        startHr = s.start.substring(0,2);
-        startMn = s.start.substring(3,5);
-        endHr = s.end.substring(0,2);
-        endMn = s.end.substring(3,5);
-        if ((prevEndHr) && ((prevEndHr != startHr) || (prevEndMn != startMn))) {
-            ns.push({start:prevEndHr+":"+prevEndMn,end:startHr+":"+startMn,free:true});
-        }
-        ns.push({start:startHr+":"+startMn,end:endHr+":"+endMn,subject:s.subject});
-        if (schedule.indexOf(s) == schedule.length - 1) {
-            ns.push({start:endHr+":"+endMn,end:"07:00",free:true});
-        }
-        prevEndHr = endHr;
-        prevEndMn = endMn;
-    });
+    // var ns = []; // schedule with free times
+    // var s = schedule[0];
+    // startHr = s.start.getHours();
+    // startMn = s.start.getMinutes();
+    // if ((startHr > 7 ) ||
+    //     ((startHr = 7 ) && (startMn > 0 ))) {
+    //     ns.push({name:"Free",location:s.location,start:today(7,0),end:s.start,free:true});
+    // }
+    // var prevEndHr, prevEndMn;
+    // schedule.forEach(s => {
+    //     startHr = s.start.getHours();
+    //     startMn = s.start.getMinutes();
+    //     endHr = s.end.getHours();
+    //     endMn = s.end.getMinutes();
+    //     if ((prevEndHr) && ((prevEndHr != startHr) || (prevEndMn != startMn))) {
+    //         ns.push({name:"Free",location:s.location,start:today(prevEndHr,prevEndMn),end:today(startHr,startMn),free:true});
+    //     }
+    //     ns.push({name:s.name,location:s.location,start:today(startHr,startMn), end:today(endHr,endMn)});
+    //     if (schedule.indexOf(s) == schedule.length - 1) {
+    //         ns.push({name:"Free",location:s.location,start:today(endHr,endMn),end:today(7,0),free:true});
+    //     }
+    //     prevEndHr = endHr;
+    //     prevEndMn = endMn;
+    // });
 
-    if (opts["nofree"]) {
-        var clk = new Clock(id,schedule); // if schedule is used then free times are not marked
-    }
-    else {
-        var clk = new Clock(id,ns); // if schedule is used then free times are not marked
-    }
+    // if (opts["nofree"]) {
+    //     var clk = new Clock(id,schedule); // if schedule is used then free times are not marked
+    // }
+    // else {
+    //     var clk = new Clock(id,ns); // if schedule is used then free times are not marked
+    // }
+
+    var clk = new Clock(id,schedule,opts)
+
     var bezOpts = clk.getBezelOpts();
     var clkOpts = clk.getClockOpts();
     var textOpts = clk.getTextOpts();
     var tickOpts = clk.getTickOpts();
+    var ampmOpts = clk.getampmOpts();
     bezOpts.bezel5Draw = true;
     textOpts.text2 = "";
-    textOpts.text1 = "";
+    textOpts.text1 = schedule[0].location; //"";
     tickOpts.innerTick = false;
     tickOpts.innerTickHead = false;
     tickOpts.pie = false;
+    // tickOpts.outerTickPill = false;
+    tickOpts.outerTickMinor = false;
+    // tickOpts.outerTickHead = false;
+    tickOpts.outerDots = false;
+    tickOpts.outer12Dot = false;
+    tickOpts.outerMinNums = false;
+    tickOpts.hourOffset = 200;
+    tickOpts.hourFont = "25pt Georgia";
+    ampmOpts.ampmDot = false;
 
     clk.redraw();
+    return clk;
 }
 
-function Clock(id,schedule) {
+function Clock(id,sched,options) {
 
+    var schedule = sched;
     var bezelOpts = {
     
         // Outer most ring, drawn first, other bezels layer on top
@@ -514,6 +536,13 @@ function Clock(id,schedule) {
         refresh = true;
     }
 
+    this.setSchedule = function(new_schedule) {
+        schedule = new_schedule;
+        this.redraw();
+    }
+
+    this.getSchedule = () => schedule;
+
     this.getClockOpts = function() {
         return clockOpts;
     }
@@ -529,6 +558,8 @@ function Clock(id,schedule) {
     this.getTickOpts = function() {
         return tickOpts;
     }
+
+    this.getampmOpts = () => ampmOpts;
     
     // called to update clock time from timeout/interval
     this.ticker = function () {
@@ -557,21 +588,25 @@ function Clock(id,schedule) {
         ctx.clearRect(0, 0, 500, 500);        // always clear entire space
         ctx.drawImage(back_canvas, 0, 0);     // draw pre drawn background to top   
 
-        // refresh background on hour change, will catch day change too for calendar
-        if(ds.getHours() != d.getHours() || refresh)
-        {
-            ds = d;
-            this.drawBackground();                  // refresh the background to catch changes
-            ctx.drawImage(back_canvas, 0, 0);        // draw background again
-            refresh = false;
+        if (this.schedule) {
+            // if a schedule exists, refresh background ( with schedule ) every minute
+            if(ds.getMinutes() != d.getMinutes() || refresh)
+            {
+                ds = d;
+                this.drawBackground();                  // refresh the background to catch changes
+                ctx.drawImage(back_canvas, 0, 0);        // draw background again
+                refresh = false;
+            }
         }
-
-        if(ds.getMinutes() != d.getMinutes() || refresh)
-        {
-            ds = d;
-            this.drawBackground();                  // refresh the background to catch changes
-            ctx.drawImage(back_canvas, 0, 0);        // draw background again
-            refresh = false;
+        else {
+            // refresh background on hour change, will catch day change too for calendar
+            if(ds.getHours() != d.getHours() || refresh)
+            {
+                ds = d;
+                this.drawBackground();                  // refresh the background to catch changes
+                ctx.drawImage(back_canvas, 0, 0);        // draw background again
+                refresh = false;
+            }
         }
 
         // hand vectors need translation to center, these all draw to the front ctx/canvas
@@ -678,16 +713,47 @@ function Clock(id,schedule) {
             // schedule ring
 
             var arcstart, arcend;
-            schedule.forEach(s => {
+            var ns = []; // schedule with free times
+
+            if (!options["nofree"]) {
+                var s = schedule[0];
+                startHr = s.start.getHours();
+                startMn = s.start.getMinutes();
+                if ((startHr > 7 ) ||
+                    ((startHr = 7 ) && (startMn > 0 ))) {
+                    ns.push({name:"Free",location:s.location,start:today(7,0),end:s.start,free:true});
+                }
+                var prevEndHr, prevEndMn;
+                schedule.forEach(s => {
+                    startHr = s.start.getHours();
+                    startMn = s.start.getMinutes();
+                    endHr = s.end.getHours();
+                    endMn = s.end.getMinutes();
+                    if ((prevEndHr) && ((prevEndHr != startHr) || (prevEndMn != startMn))) {
+                        ns.push({name:"Free",location:s.location,start:today(prevEndHr,prevEndMn),end:today(startHr,startMn),free:true});
+                    }
+                    ns.push({name:s.name,location:s.location,start:today(startHr,startMn), end:today(endHr,endMn)});
+                    if (schedule.indexOf(s) == schedule.length - 1) {
+                        ns.push({name:"Free",location:s.location,start:today(endHr,endMn),end:today(7,0),free:true});
+                    }
+                    prevEndHr = endHr;
+                    prevEndMn = endMn;
+                });
+            }
+        
+
+
+
+            (options["nofree"]?schedule:ns).forEach(s => {
                 
-                startHr = s.start.substring(0,2);
-                startMn = s.start.substring(3,5);
-                endHr = s.end.substring(0,2);
-                endMn = s.end.substring(3,5);
+                startHr = s.start.getHours();
+                startMn = s.start.getMinutes();
+                endHr = s.end.getHours();
+                endMn = s.end.getMinutes();
 
                 currTime = d.getHours()*60+d.getMinutes();
-                startTime = startHr*60+parseInt(startMn);
-                endTime = endHr*60+parseInt(endMn)
+                startTime = startHr*60+startMn;
+                endTime = endHr*60+endMn;
 
                 back_ctx.beginPath();
 
